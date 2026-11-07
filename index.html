@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070b" />
+  <meta name="description" content="DEAD//SPLIT 尸潮分界 — 左右滑行、自动索敌，在加宽的感染区与狭窄的军需区之间杀出一条活路。" />
+  <title>DEAD//SPLIT · 尸潮分界</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2305080c'/%3E%3Cpath d='M14 16h15c11 0 18 6 18 16S40 48 29 48H14V16Zm11 9v13h4c5 0 8-2 8-6s-3-7-8-7h-4Z' fill='%2365efff'/%3E%3Cpath d='M43 12h6L34 52h-6L43 12Z' fill='%23ff4555'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="world-bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-red"></div>
+    <div class="bg-glow bg-glow-cyan"></div>
+    <div class="bg-noise"></div>
+  </div>
+
+  <aside class="outside-brand" aria-hidden="true">
+    <span class="brand-mark">DS</span>
+    <span class="brand-copy">DEAD//SPLIT</span>
+    <span class="brand-line"></span>
+    <span class="brand-sub">LAST LINE / SECTOR 09</span>
+  </aside>
+  <aside class="outside-note" aria-hidden="true">
+    <span>HOSTILE PRESSURE</span>
+    <span class="note-dot"></span>
+    <span>SUPPLY WINDOW</span>
+    <span class="note-line"></span>
+    <span>HOLD THE LINE</span>
+  </aside>
+
+  <main id="stage" class="stage" aria-label="DEAD SPLIT 游戏画面">
+    <canvas id="scene" aria-label="三维游戏场景"></canvas>
+
+    <div class="fx-layer" aria-hidden="true">
+      <div class="fx-vignette"></div>
+      <div id="damage-vignette" class="damage-vignette"></div>
+      <div id="alert-vignette" class="alert-vignette"></div>
+      <div id="flash-layer" class="flash-layer"></div>
+      <div class="scanlines"></div>
+      <div class="screen-grain"></div>
+    </div>
+
+    <section id="hud" class="hud is-hidden" aria-label="游戏状态">
+      <header class="hud-top">
+        <div class="hud-panel armor-panel">
+          <div class="panel-corner"></div>
+          <div class="label-row">
+            <span class="eyebrow">ARMOR / 装甲</span>
+            <b id="armor-num">100</b>
+          </div>
+          <div class="meter armor-meter">
+            <i id="armor-fill" class="meter-fill"></i>
+            <i class="meter-sheen"></i>
+            <span class="segments"></span>
+          </div>
+          <div class="sub-row">
+            <span class="score-label">SCORE</span>
+            <span id="score-num">000000</span>
+          </div>
+        </div>
+
+        <div class="threat-panel">
+          <span class="eyebrow">THREAT</span>
+          <b id="threat-num">01</b>
+          <div class="threat-meter"><i id="threat-fill"></i></div>
+          <span id="threat-kills" class="threat-note">0 / 10</span>
+        </div>
+
+        <div class="hud-panel time-panel">
+          <div class="panel-corner"></div>
+          <div class="label-row right">
+            <span class="eyebrow">SURVIVAL</span>
+            <i class="live-dot"></i>
+          </div>
+          <div id="time-num" class="time-num">00:00</div>
+          <div class="sub-row right">
+            <span id="kills-num">0</span><span class="score-label">KILLS</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="zone-marks" aria-hidden="true">
+        <div class="zone-mark zone-left"><span class="zone-dot"></span><span>感染区</span><em>HOSTILE</em></div>
+        <div class="zone-mark zone-right"><span class="zone-dot"></span><span>军需区</span><em>SUPPLY</em></div>
+      </div>
+
+      <div id="alert-banner" class="alert-banner" aria-live="polite">
+        <span id="alert-kicker" class="alert-warn">WARNING</span>
+        <span id="alert-text">威胁等级提升</span>
+        <b id="alert-level">02</b>
+      </div>
+
+      <div id="event-feed" class="event-feed" aria-live="polite"></div>
+
+      <div id="combo-badge" class="combo-badge">
+        <span class="combo-x">×</span><b id="combo-num">2</b><em>连杀</em>
+      </div>
+
+      <div id="boss-bar" class="boss-bar">
+        <div class="boss-label"><span class="boss-skull">☠</span><b>暴君 · TYRANT</b><em id="boss-hp-num">100%</em></div>
+        <div class="boss-meter"><i id="boss-fill"></i></div>
+      </div>
+
+      <div id="toast" class="toast" aria-live="polite">
+        <div class="toast-edge"></div>
+        <div class="toast-kicker"><span>SUPPLY ACQUIRED</span><b id="toast-rarity">稀有</b></div>
+        <div class="toast-body">
+          <div id="toast-icon" class="toast-icon">✦</div>
+          <div class="toast-copy">
+            <b id="toast-name">焚城</b>
+            <p id="toast-desc">切换武器</p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="hud-bottom">
+        <div class="weapon-card">
+          <div class="weapon-icon-wrap"><span id="weapon-icon" class="weapon-icon">MG</span><i class="weapon-pulse"></i></div>
+          <div class="weapon-copy">
+            <span class="eyebrow">ACTIVE WEAPON</span>
+            <b id="weapon-name">V-07 复仇者</b>
+            <span id="weapon-meta">制式机枪 · LV.1</span>
+          </div>
+        </div>
+        <div class="bottom-stats">
+          <div class="dps-block"><span id="dps-num">30</span><em>DPS</em></div>
+          <div id="chips" class="chips"></div>
+        </div>
+      </footer>
+
+      <div id="aim-hint" class="aim-hint">
+        <span class="hint-keys"><i>‹</i><i>›</i></span>
+        <div><b>左右移动</b><em>AUTO AIM · AUTO FIRE</em></div>
+      </div>
+
+      <div class="side-controls">
+        <button id="pause-btn" class="icon-btn" type="button" aria-label="暂停游戏">Ⅱ</button>
+        <button id="mute-btn" class="icon-btn" type="button" aria-label="静音">♪</button>
+      </div>
+
+      <div class="hud-corner hud-corner-tl"></div>
+      <div class="hud-corner hud-corner-tr"></div>
+      <div class="hud-corner hud-corner-bl"></div>
+      <div class="hud-corner hud-corner-br"></div>
+    </section>
+
+    <section id="screen-start" class="screen start-screen">
+      <div class="screen-inner start-inner">
+        <div class="top-meta">
+          <span class="meta-chip"><i></i> LAST LINE ACTIVE</span>
+          <span class="meta-right">
+            <span class="meta-code">SECTOR // 09</span>
+            <button id="menu-mute" class="menu-audio" type="button">音效 开</button>
+          </span>
+        </div>
+
+        <div class="title-wrap">
+          <div class="title-eyebrow"><span></span> VERTICAL DEFENSE PROTOCOL <span></span></div>
+          <h1 class="game-title" aria-label="DEAD SPLIT">
+            <span class="title-dead" data-text="DEAD">DEAD</span><span class="title-split" data-text="//SPLIT">//SPLIT</span>
+          </h1>
+          <div class="cn-title"><span>尸</span><span>潮</span><span class="cn-slash">/</span><span>分</span><span>界</span></div>
+        </div>
+
+        <p class="tagline">左边是死路。右边是军火。<br /><b>左右滑行，守住你的射击位。</b></p>
+
+        <div class="briefing">
+          <div class="brief-item">
+            <span class="brief-num">01</span>
+            <span class="brief-glyph">‹ ›</span>
+            <span class="brief-text"><b>左右移动</b><em>A / D 或拖动屏幕</em></span>
+          </div>
+          <div class="brief-item">
+            <span class="brief-num">02</span>
+            <span class="brief-glyph">◎</span>
+            <span class="brief-text"><b>自动索敌</b><em>持续射击最近目标</em></span>
+          </div>
+          <div class="brief-item">
+            <span class="brief-num">03</span>
+            <span class="brief-glyph">▣</span>
+            <span class="brief-text"><b>击碎数字</b><em>滑到补给下方夺取</em></span>
+          </div>
+        </div>
+
+        <button id="start-btn" class="primary-btn" type="button">
+          <span class="btn-glitch" aria-hidden="true">接入防线</span>
+          <span class="btn-main">接入防线</span>
+          <em>ENTER THE LINE</em>
+          <i class="btn-arrow">›</i>
+        </button>
+
+        <div class="start-footer">
+          <span>最高记录 <b id="best-time">00:00</b> · <b id="best-kills">0</b> KILLS</span>
+          <span class="start-tech">THREE.JS / WEBGL</span>
+        </div>
+      </div>
+      <div class="hazard-strip top"></div>
+      <div class="hazard-strip bottom"></div>
+    </section>
+
+    <section id="screen-over" class="screen over-screen is-hidden">
+      <div class="screen-inner over-inner">
+        <div class="over-eyebrow"><span></span> CONNECTION LOST <span></span></div>
+        <h2 class="over-title">防线<span>失守</span></h2>
+        <p class="over-sub">尸潮淹没了射击位。<br />但你的击杀数字会被记录下来。</p>
+
+        <div class="result-grid">
+          <div class="result-cell"><span>存活时间</span><b id="over-time">00:00</b></div>
+          <div class="result-cell"><span>总击杀</span><b id="over-kills">0</b></div>
+          <div class="result-cell"><span>威胁等级</span><b id="over-threat">01</b></div>
+          <div class="result-cell"><span>击破补给</span><b id="over-crates">0</b></div>
+          <div class="result-cell wide"><span>最终得分</span><b id="over-score">0</b><em id="over-best">NEW RECORD</em></div>
+        </div>
+
+        <button id="restart-btn" class="primary-btn danger" type="button">
+          <span class="btn-glitch" aria-hidden="true">再次部署</span>
+          <span class="btn-main">再次部署</span>
+          <em>REDEPLOY</em>
+          <i class="btn-arrow">›</i>
+        </button>
+        <div class="over-footer">TIP / 利用左右滑行躲开酸液，优先清掉装甲单位与喷吐者。</div>
+      </div>
+    </section>
+
+    <section id="screen-pause" class="screen pause-screen is-hidden">
+      <div class="screen-inner pause-inner">
+        <span class="pause-code">PAUSED // SYSTEMS HOLD</span>
+        <h2>战术暂停</h2>
+        <p>防线已锁定。准备好后继续。</p>
+        <button id="resume-btn" class="primary-btn compact" type="button">
+          <span class="btn-main">继续战斗</span>
+          <em>RESUME</em>
+        </button>
+        <button id="quit-btn" class="text-btn" type="button">放弃并返回部署界面</button>
+      </div>
+    </section>
+
+    <div id="rotate-hint" class="rotate-hint">
+      <span>↻</span>
+      <b>建议竖屏游玩</b>
+      <em>ROTATE YOUR DEVICE</em>
+    </div>
+
+    <div id="boot" class="boot">
+      <div class="boot-mark">DS</div>
+      <div class="boot-bar"><i></i></div>
+      <span>WARMING UP THE LINE...</span>
+    </div>
+  </main>
+
+  <script src="./game.js" defer></script>
+</body>
+</html>
